@@ -68,6 +68,7 @@ def imshow(img):
         plt.imshow(npimg,cmap='gray')
     else:
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
+    plt.axis('off')
 
 def train_net(net, trainloader, num_epochs, GPU=False, 
               weightpath='./weights/',save_epoch=50,
