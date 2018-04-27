@@ -33,10 +33,11 @@ class DeepCodec(nn.Module):
     def forward(self,x):
         # Assumes x is num x N x 1
         # First convert to num x r x M
-        num, N,_ = x.size()
+        batch, N,_ = x.size()
         M = int(N/self.r)
         #print(x.size())
-        y = x.view(num,self.r,M)
+        y = x.view(batch,M,self.r)
+        y = y.permute(0,2,1)
         #print(y.size())
         y = self.conv2(y)
         y = self.conv3(y)
@@ -44,7 +45,9 @@ class DeepCodec(nn.Module):
         y = self.conv5(y)
         y = self.conv6(y)
         y = self.conv7(y)
-        z = y.view(num,N, 1)
+        y = y.permute(0,2,1)
+        y = y.contiguous()
+        z = y.view(batch,N, 1)
         return z
     
 def get_datetime():
@@ -65,20 +68,32 @@ def imshow(img):
         plt.imshow(npimg,cmap='gray')
     else:
         plt.imshow(np.transpose(npimg, (1, 2, 0)))
+    plt.axis('off')
 
 def train_net(net, trainloader, num_epochs, GPU=False, 
               weightpath='./weights/',save_epoch=50,
-              lr=0.001,momentum=0.9):
+              lr=0.001,momentum=0.9,saveweights=True):
     # Create output directory
     weightpath = os.path.join(weightpath,get_datetime())
     os.makedirs(weightpath)
+    logpath = os.path.join(weightpath,'log.txt')
+    with open(logpath, "wt") as text_file:
+        print('Epoch\tLoss\tEpoch Time\tTotal Time',file=text_file)
+
+    num_data = len(trainloader)*trainloader.batch_size
+    
+    # Accumulate Log text
+    logtxt = ''
+    
+    # Determine Minibatch size
+    minibatch=max(1,int(len(trainloader)/10))
     
     # Define Loss Function/Optimizer
     criterion = nn.MSELoss()
     optimizer = optim.SGD(net.parameters(),lr=lr,momentum=momentum)
     trainstart = time.time()
     for epoch in range(num_epochs):  # loop over the dataset multiple times
-
+        epoch_loss = 0.0
         running_loss = 0.0
         epochstart = time.time()
         for i, data in enumerate(trainloader, 0):
@@ -101,16 +116,33 @@ def train_net(net, trainloader, num_epochs, GPU=False,
 
             # print statistics
             running_loss += loss.data[0]
-            if i % 2000 == 1999:    # print every 2000 mini-batches
+            epoch_loss += loss.data[0]
+            if i % minibatch == 0:    # print every 2000 mini-batches
                 print('\t[%d, %5d] loss: %.3f, %.3f seconds elapsed' %
-                      (epoch + 1, i + 1, running_loss / 2000, time.time() - epochstart ))
+                      (epoch + 1, i + 1, running_loss / minibatch, time.time() - epochstart ))
                 running_loss = 0.0
         epochend = time.time()
         print('Epoch %d Training Time: %.3f seconds\nTotal Elapsed Time: %.3f seconds' %
                (epoch+1, epochend-epochstart,epochend-trainstart))
+        
+        # write loss to logfile
+        #with open(logpath, "at") as text_file:
+        #    print('%i\t%f\t%f\t%f\n' % 
+        #        (epoch+1,float(epoch_loss)/num_data,epochend-epochstart,epochend-trainstart)
+        #         ,file=text_file)
+        logtxt += '%i\t%f\t%f\t%f\n' % (epoch+1,float(epoch_loss)/num_data,epochend-epochstart,epochend-trainstart)
+        epoch_loss=0.0
+
+        
         # Save weights
-        if epoch % save_epoch == 0 or epoch == num_epochs-1:
-            outpath = os.path.join(weightpath,'epoch_'+str(epoch+1)+'.weights')
-            torch.save(net.state_dict(),outpath)
+        if (epoch % save_epoch == 0 or epoch == num_epochs-1):
+            if saveweights:
+                outpath = os.path.join(weightpath,'epoch_'+str(epoch+1)+'.weights')
+                torch.save(net.state_dict(),outpath)
+            
+            # write loss to logfile
+            with open(logpath, "at") as text_file:
+                print(logtxt[:-2],file=text_file)
+                logtxt = ''
 
     print('Finished Training')
