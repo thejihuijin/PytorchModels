@@ -95,3 +95,58 @@ class FBPConvNet(nn.Module):
         y = x8 + x
         
         return y
+
+class Discriminator(nn.Module):
+    def __init__(self):
+        super(Discriminator, self).__init__()
+        # Input 1 x 256 x 256 -> 64 x 256 x 256
+        self.conv1 = nn.Conv2d(1,64,3,padding=1,stride=1)    
+        self.batch1 = nn.BatchNorm2d(64)
+        
+        # -> 128 x 128 x 128
+        self.conv2 = nn.Conv2d(64,128,7,padding=3,stride=2)
+        self.batch2 = nn.BatchNorm2d(128)
+
+        # -> 256 x 32 x 32 -> 256 x 22 x 22
+        self.conv3 = nn.Conv2d(128,256,5,padding=2,stride=2)
+        self.batch3 = nn.BatchNorm2d(256)
+        self.conv4 = nn.Conv2d(256,256,7,padding=3,stride=3)
+        self.batch4 = nn.BatchNorm2d(256)
+        
+        # -> 512 x 8 x 8
+        self.conv5 = nn.Conv2d(256,512,5,padding=2,stride=3)
+        self.batch5 = nn.BatchNorm2d(512)
+        
+        # -> 1024 x 1 x 1
+        self.conv6 = nn.Conv2d(512,1024,5,padding=2,stride=3)
+        self.batch6 = nn.BatchNorm2d(1024)
+        self.conv7 = nn.Conv2d(1024,1024,3,padding=1,stride=3)
+        #self.batch7 = nn.BatchNorm2d(1024)
+        
+        # Decision layers
+        self.conv8 = nn.Conv2d(1024,1024,1)
+        self.conv9 = nn.Conv2d(1024,1024,1)
+        self.conv10 = nn.Conv2d(1024,1,1)
+        
+        # Non-Linear Activations
+        self.leaky = nn.LeakyReLU()
+        self.sigmoid = nn.Sigmoid()
+        self.conv2_drop = nn.Dropout2d(p=.2)
+        
+        
+        
+    def forward(self,x):
+        # Generate Features
+        x = self.leaky(self.batch1(self.conv1(x)))
+        x = self.leaky(self.batch2(self.conv2(x)))
+        x = self.leaky(self.batch3(self.conv3(x)))
+        x = self.leaky(self.batch4(self.conv4(x)))
+        x = self.leaky(self.batch5(self.conv5(x)))
+        x = self.leaky(self.batch6(self.conv6(x)))
+        x = self.leaky(self.conv7(x))
+        
+        # Decision Layers
+        x = self.leaky(self.conv2_drop(self.conv8(x)))
+        x = self.leaky(self.conv2_drop(self.conv9(x)))
+        x = self.sigmoid(self.conv10(x))
+        return x[:,:,0,0]
