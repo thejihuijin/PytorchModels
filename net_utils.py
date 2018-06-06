@@ -228,7 +228,7 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
         # log losses
         d_losses[epoch] /= num_data
         g_losses[epoch] /= num_data
-        logtxt += '%i\t%f\%f\t%f\t%f\n' % (epoch+1,d_losses[epoch], g_losses[epoch],
+        logtxt += '%i\t%f\t%f\t%f\t%f\n' % (epoch+1,d_losses[epoch], g_losses[epoch],
                                            epochend-epochstart,epochend-trainstart)
 
         
