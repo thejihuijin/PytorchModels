@@ -66,6 +66,7 @@ def train_net(net, trainloader, num_epochs, GPU=False,
     for epoch in range(num_epochs):  # loop over the dataset multiple times
         epoch_loss = 0.0
         running_loss = 0.0
+        running_count = 0
         epochstart = time.time()
         for i, data in enumerate(trainloader, 0):
             # get the inputs
@@ -88,10 +89,12 @@ def train_net(net, trainloader, num_epochs, GPU=False,
             # print statistics
             running_loss += loss.data[0]
             epoch_loss += loss.data[0]
+            running_count += 1
             if (i+1) % minibatch == 0:    # print every 2000 mini-batches
                 print('\t[%d, %5d] loss: %.3f, %.3f seconds elapsed' %
-                      (epoch + 1, i + 1, running_loss / minibatch, time.time() - epochstart ))
+                      (epoch + 1, i + 1, running_loss / running_count, time.time() - epochstart ))
                 running_loss = 0.0
+                running_count = 0
         epochend = time.time()
         print('Epoch %d Training Time: %.3f seconds\nTotal Elapsed Time: %.3f seconds' %
                (epoch+1, epochend-epochstart,epochend-trainstart))
@@ -141,7 +144,7 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
     logtxt = ''
     
     # Determine minibatch size
-    minibatch = max(1,int(len(realtrainloader))/10)
+    minibatch = max(1,int(len(realtrainloader)/10))
     
     # Define Loss Function/Optimizer
     bceloss = nn.BCELoss()
@@ -159,6 +162,7 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
         g_epoch_loss = 0.0
         d_running_loss = 0.0
         g_running_loss = 0.0
+        running_count = 0
         
         epochstart = time.time()
 
@@ -222,14 +226,16 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
             
             g_running_loss += g_loss.data[0]
             g_losses[epoch] += g_loss.data[0]
+            running_count += 1
             
             # print statistics
             if (batch_index+1) % minibatch == 0:
                 print('\t[%d, %5d] D loss: %.3f, G loss: %.3f, %.3f seconds elapsed' %
-                      (epoch + 1, batch_index + 1, d_running_loss / minibatch, 
-                       g_running_loss/minibatch, time.time() - epochstart))
+                      (epoch + 1, batch_index + 1, d_running_loss / running_count, 
+                       g_running_loss/running_count, time.time() - epochstart))
                 d_running_loss = 0.0
                 g_running_loss = 0.0
+                running_count = 0
         # Record epoch statistics
         epochend = time.time()        
         print('Epoch %d Training Time: %.3f seconds\nTotal Elapsed Time: %.3f seconds' %
