@@ -24,13 +24,23 @@ def target_ones(N,GPU=False):
         return torch.ones(N,1).cuda()
     else:
         return torch.ones(N,1)
-
+def target_noisy_ones(N,GPU=False):
+    # maps between .7 and 1.2
+    labels = torch.rand((N,1))*.5+.7
+    if GPU:
+        return labels.cuda()
+    return labels
 def target_zeros(N,GPU=False):
     if GPU:
         return torch.zeros(N,1).cuda()
     else:
         return torch.zeros(N,1)  
-
+def target_noisy_zeros(N,GPU=False):
+    # maps between .7 and 1.2
+    labels = torch.rand((N,1))*.3
+    if GPU:
+        return labels.cuda()
+    return labels
 def train_net(net, trainloader, num_epochs, GPU=False, 
               weightpath='./weights/',save_epoch=50,
               lr=0.01,momentum=0.99,saveweights=True):
@@ -175,13 +185,13 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
 
             # Train D on real
             d_real_decision = D(d_real_data)
-            d_real_error = bceloss(d_real_decision, Variable(target_ones(batch_size,GPU)))
+            d_real_error = bceloss(d_real_decision, Variable(target_noisy_ones(batch_size,GPU)))
             d_real_error.backward()
 
             # Train D on fake
 
             d_fake_decision = D(d_fake_data)
-            d_fake_error = bceloss(d_fake_decision, Variable(target_zeros(batch_size,GPU))) 
+            d_fake_error = bceloss(d_fake_decision, Variable(target_noisy_zeros(batch_size,GPU))) 
             d_fake_error.backward()
             d_optimizer.step()
             d_loss = d_real_error+d_fake_error
@@ -204,7 +214,7 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
             g_optimizer.zero_grad()
 
             dg_fake_decision = D(g_fake_data)
-            g_loss = (10**-3)*bceloss(dg_fake_decision, Variable(target_ones(batch_size,GPU)))
+            g_loss = (10**-3)*bceloss(dg_fake_decision, Variable(target_noisy_ones(batch_size,GPU)))
             g_loss +=  mseloss(g_fake_data,Variable(g_fake_label))
 
             g_loss.backward()
