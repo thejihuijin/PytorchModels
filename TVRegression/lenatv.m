@@ -15,32 +15,43 @@ load('../data/preproc_x20_ellipse_fullfbp.mat','lab_n')
 x = lab_n(:,:,1,1);
 clear('lab_n');
 %%
-n = 128;
+n = 256;
 x = imresize(x,[n,n]);
 clf;
 imageplot(x);
+%% del
+data = hdf5read('../EllipseGeneration/RandomLineEllipses15.hdf5','ellip/test_labels');
+x = data(:,:,1);
+
+figure;
+subplot(121)
+imagesc(oldx)
+colorbar()
+subplot(122)
+imagesc(x)
+colorbar()
 %% Set up AtA matrix
 L = 15;
-[M,Mh,mh,mhi] = LineMask(L,n);
+[M,Mh,mh,mhi] = RandomLineMask(L,n);
 OMEGA = mhi;
 A = @(z) A_fhp(z, OMEGA);
 At = @(z) At_fhp(z, OMEGA, n);
 %%
-F = dftmtx(n);
-fft2d = kron(F,F)/n;
-clear F;
-
-mask = M;
-m = length(find(mask));
-sample_mat = zeros(numel(mask),numel(mask));
-idx = sub2ind(size(sample_mat), find(mask), find(mask));
-sample_mat(idx) = 1;
-
-clear idx m mask
+% F = dftmtx(n);
+% fft2d = kron(F,F)/n;
+% clear F;
+% 
+% mask = M;
+% m = length(find(mask));
+% sample_mat = zeros(numel(mask),numel(mask));
+% idx = sub2ind(size(sample_mat), find(mask), find(mask));
+% sample_mat(idx) = 1;
+% 
+% clear idx m mask
 
 % AtA = real(fft2d'*sample_mat*fft2d);
 %AtAinv = inv(AtA);
-clear fft2d sample_mat
+% clear fft2d sample_mat
 %% Set up optimization
 % measurements
 y = A(x(:));
@@ -49,7 +60,7 @@ y = A(x(:));
 xbp = At(y);
 Xbp = reshape(xbp,n,n);
 
-lambda = 10;
+lambda = .1;
 
 K = @(x)grad(x);
 KS = @(x)-div(x);
@@ -79,13 +90,13 @@ options.method = 'fista';
 
 %%
 %[xFista,EFista] = perform_fb_strongly(Xbp, K, KS, GradGS_lm, ProxFS, L, options);
-options.niter = 10000;
+options.niter = 1000;
 [xAdmm,EAdmm] = perform_admm(Xbp, K,  KS, ProxFS, ProxGlm, options);
 %%
-G = @(x)1/2*norm(Xbp-x,'fro')^2;
-ProxG = @(x,tau)(x+tau*Xbp)/(1+tau);
-options.report = @(x)G(x) + F(K(x));
-[xAdmm2,EAdmm2] = perform_admm(Xbp, K,  KS, ProxFS, ProxG, options);
+% G = @(x)1/2*norm(Xbp-x,'fro')^2;
+% ProxG = @(x,tau)(x+tau*Xbp)/(1+tau);
+% options.report = @(x)G(x) + F(K(x));
+% [xAdmm2,EAdmm2] = perform_admm(Xbp, K,  KS, ProxFS, ProxG, options);
 
 %% Continue training
 %load('Admm.mat')
@@ -94,14 +105,17 @@ options.report = @(x)G(x) + F(K(x));
 %%
 figure;
 subplot(221)
-imageplot(x)
+imagesc(x)
+colorbar()
 title('Original')
 subplot(222)
-imageplot(Xbp)
+imagesc(Xbp)
+colorbar()
 title('Start')
 subplot(223)
-imageplot(xAdmm);
+imagesc(xAdmm);
 title('TV Reg')
+colorbar()
 %subplot(224)
 %imageplot(xAdmm_cont);
 %title('Denoising')
