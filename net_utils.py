@@ -150,8 +150,8 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
     bceloss = nn.BCELoss()
     mseloss = nn.MSELoss()
 
-    d_optimizer = optim.Adam(D.parameters(), lr=0.0002)
-    g_optimizer = optim.Adam(G.parameters(), lr=0.0002)
+    d_optimizer = optim.Adam(D.parameters(), lr=0.0002, betas=(.5,0.999))
+    g_optimizer = optim.Adam(G.parameters(), lr=0.0002, betas = (.5,0.999))
 
     
     G.train()
@@ -188,13 +188,13 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
             d_optimizer.zero_grad()
 
             # Train D on real
-            d_real_decision = D(d_real_data)
+            d_real_decision = D(d_real_data)[:,:,0,0]
             d_real_error = bceloss(d_real_decision, Variable(target_noisy_ones(batch_size,GPU)))
             d_real_error.backward()
 
             # Train D on fake
 
-            d_fake_decision = D(d_fake_data)
+            d_fake_decision = D(d_fake_data)[:,:,0,0]
             d_fake_error = bceloss(d_fake_decision, Variable(target_noisy_zeros(batch_size,GPU))) 
             d_fake_error.backward()
             d_optimizer.step()
@@ -217,9 +217,9 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
   
             g_optimizer.zero_grad()
 
-            dg_fake_decision = D(g_fake_data)
-            g_loss = (10**-3)*bceloss(dg_fake_decision, Variable(target_noisy_ones(batch_size,GPU)))
-            g_loss +=  mseloss(g_fake_data,Variable(g_fake_label))
+            dg_fake_decision = D(g_fake_data)[:,:,0,0]
+            g_loss = (10**-1)*bceloss(dg_fake_decision, Variable(target_noisy_ones(batch_size,GPU)))
+            g_loss +=  100*mseloss(g_fake_data,Variable(g_fake_label))
 
             g_loss.backward()
             g_optimizer.step()
