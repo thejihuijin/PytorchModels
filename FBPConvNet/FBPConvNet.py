@@ -249,7 +249,7 @@ class Discriminator2(nn.Module):
     def __init__(self):
         super(Discriminator2, self).__init__()
         # Input 1 x 256 x 256 -> 64 x 128 x 128
-        self.conv1 = nn.Conv2d(1,64,3,padding=1,stride=1)    
+        self.conv1 = nn.Conv2d(1,64,3,padding=1,stride=2)    
         self.batch1 = nn.BatchNorm2d(64)
         
         # -> 128 x 64 x 64
@@ -278,7 +278,7 @@ class Discriminator2(nn.Module):
         self.conv9 = nn.Conv2d(1024,1024,3,padding=1,stride=2)
         
         # Decision layers
-        self.d_conv1 = nn.Conv2d(1024,1024,1)
+        self.d_conv1 = nn.Conv2d(1024,1024,2)
 #         self.d_conv2 = nn.Conv2d(1024,1024,1)
         self.d_conv3 = nn.Conv2d(1024,1,1)
         
@@ -298,10 +298,71 @@ class Discriminator2(nn.Module):
         x = self.leaky(self.batch5(self.conv5(x)))
         x = self.leaky(self.batch6(self.conv6(x)))
         x = self.leaky(self.batch7(self.conv7(x)))
-        x = self.leaky(self.batch8(self.conv8(x)))
-        x = self.leaky(self.conv9(x))
+        #x = self.leaky(self.batch8(self.conv8(x)))
+        #x = self.leaky(self.conv9(x))
         
         # Decision Layers
         x = self.leaky(self.conv2_drop(self.d_conv1(x)))
         x = self.sigmoid(self.d_conv3(x))
+        return x
+
+class DiscriminativeNet(torch.nn.Module):
+    
+    def __init__(self):
+        super(DiscriminativeNet, self).__init__()
+        
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=1, out_channels=128, kernel_size=4, 
+                stride=2, padding=1, bias=False
+            ),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=128, out_channels=256, kernel_size=4,
+                stride=2, padding=1, bias=False
+            ),
+            nn.BatchNorm2d(256),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=256, out_channels=512, kernel_size=4,
+                stride=2, padding=1, bias=False
+            ),
+            nn.BatchNorm2d(512),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.conv4 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=512, out_channels=1024, kernel_size=4,
+                stride=2, padding=1, bias=False
+            ),
+            nn.BatchNorm2d(1024),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.conv5 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=1024, out_channels=1024, kernel_size=4,
+                stride=2, padding=1, bias=False
+            ),
+            nn.BatchNorm2d(1024),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.out = nn.Sequential(
+            nn.Linear(1024*8*8, 1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        # Convolutional layers
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.conv5(x)
+        # Flatten and apply sigmoid
+        x = x.view(-1, 1024*8*8)
+        x = self.out(x)
         return x
