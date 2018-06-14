@@ -1,8 +1,12 @@
 %% 
 clear; close all; clc
 %% Read in Data
-data = hdf5read('../EllipseGeneration/RandomLineEllipses15.hdf5','ellip/test_labels');
+data = hdf5read('../data/RandomLineEllipses15.hdf5','ellip/test_labels');
+%%
+addpath('./toolbox_optim','./toolbox_optim/toolbox','./CGD')
+
 %% Evaluate
+
 measurements = zeros(size(data));
 recovered = zeros(size(data));
 num_data = size(data,3);
@@ -12,7 +16,6 @@ timing = zeros(1,num_data);
 % Loop through data
 starttime = tic();
 for i=1:num_data
-    display(['Data ', num2str(i)])
     % Prepare data
     x = data(:,:,i);
     
@@ -61,6 +64,8 @@ for i=1:num_data
     timing(i) = toc(admmstart);
     recovered(:,:,i) = xAdmm;
     
+    display(['Data ', num2str(i),'\t time ',num2str(timing(i))])
+    
 end
 toc(starttime)
 %% record
@@ -69,12 +74,21 @@ i = 1;
 figure;
 subplot(131)
 imagesc(measurements(:,:,i))
+colorbar()
 subplot(132)
 imagesc(recovered(:,:,i))
 title(['MSE = ', num2str(mean2((data(:,:,i)-recovered(:,:,i)).^2))])
+colorbar()
 subplot(133)
 imagesc(data(:,:,i))
 title('Ground Truth')
+colorbar()
+%%
+%save('tv_results.mat','timing','measurements','data','recovered')
+%%
+final_mses = mean(mean((recovered - data).^2,1),2);
+figure; plot(final_mses(:))
+mean(final_mses(:))
 
 %% Single
 % Prepare data
