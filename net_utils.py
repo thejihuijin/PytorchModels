@@ -5,11 +5,14 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader
+import random
 
 import datetime
 import os
 import time
 import numpy as np
+import matplotlib.pyplot as plt
 
 def get_datetime():
     time = datetime.datetime.today()
@@ -41,6 +44,61 @@ def target_noisy_zeros(N,GPU=False):
     if GPU:
         return labels.cuda()
     return labels
+
+def displaySample(sample):
+    img, label = sample
+    plt.figure()
+    plt.subplot(121)
+    plt.imshow(img[0].numpy())
+    plt.axis('off')
+    plt.title('Img')
+    
+    plt.subplot(122)
+    plt.imshow(label[0].numpy())
+    plt.axis('off')
+    plt.title('Label')
+    plt.show()
+
+########################################
+#           Transforms
+########################################
+fulltransform = transforms.Compose([transforms.ToPILImage(), 
+                                    transforms.RandomResizedCrop(256,scale=(.85,1.0),ratio=(1,1)),
+                                    transforms.RandomHorizontalFlip(),
+                                    transforms.ToTensor()])
+class EllipseDataset(Dataset):
+    # Currently designed to only take in numpy arrays
+    def __init__(self, images, labels, preprocess=preprocess, transform=None):
+        self.images = preprocess(images)
+        self.labels = preprocess(labels)
+        self.transform = transform
+    def __len__(self):
+        return self.images.size(0)
+    def __getitem__(self,idx):
+        if self.transform:
+            return self.transform((self.images[idx],self.labels[idx]))
+        return (self.images[idx],self.labels[idx])
+class EllipseTransformPair(object):
+    def __init__(self,fulltransform=fulltransform):
+        self.fulltransform=fulltransform
+    def __call__(self, sample):
+        seed = random.randint(0,2**32)
+        img, label = sample
+        imgmin = img.min()
+        imgrange = img.max()-imgmin
+        img = (img-imgmin)/imgrange
+        random.seed(seed)
+        img = self.fulltransform(img)*imgrange + imgmin
+        
+        labelmin = label.min()
+        labelrange = label.max()-labelmin
+        label = (label-labelmin)/labelrange
+        random.seed(seed)
+        label = self.fulltransform(label)*labelrange+labelmin
+        return (img,label)
+########################################
+#           Training
+########################################
 def train_net(net, trainloader, num_epochs, GPU=False, 
               weightpath='./weights/',save_epoch=50,
               lr=0.01,momentum=0.99,saveweights=True):
