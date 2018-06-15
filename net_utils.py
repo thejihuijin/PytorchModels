@@ -78,6 +78,18 @@ class EllipseDataset(Dataset):
         if self.transform:
             return self.transform((self.images[idx],self.labels[idx]))
         return (self.images[idx],self.labels[idx])
+class RealDataset(Dataset):
+    # Currently designed to only take in numpy arrays
+    def __init__(self, labels, preprocess=preprocess, transform=fulltransform):
+        self.labels = preprocess(labels)
+        self.transform = transform
+    def __len__(self):
+        return self.labels.size(0)
+    def __getitem__(self,idx):
+        if self.transform:
+            return self.transform(self.labels[idx]))
+        return (self.images[idx],self.labels[idx])
+    
 class EllipseTransformPair(object):
     def __init__(self,fulltransform=fulltransform):
         self.fulltransform=fulltransform
