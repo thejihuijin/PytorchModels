@@ -43,7 +43,7 @@ def target_noisy_zeros(N,GPU=False):
     return labels
 def train_net(net, trainloader, num_epochs, GPU=False, 
               weightpath='./weights/',save_epoch=50,
-              lr=0.01,momentum=0.99,saveweights=True):
+              lr=0.01,momentum=0.99,weight_decay=0,saveweights=True):
     # Create output directory
     weightpath = os.path.join(weightpath,get_datetime())
     os.makedirs(weightpath)
@@ -60,8 +60,9 @@ def train_net(net, trainloader, num_epochs, GPU=False,
     minibatch=max(1,int(len(trainloader)/10))
     
     # Define Loss Function/Optimizer
-    criterion = nn.MSELoss()
-    optimizer = optim.SGD(net.parameters(),lr=lr,momentum=momentum)
+    criterion = nn.L1Loss()
+    #optimizer = optim.SGD(net.parameters(),lr=lr,momentum=momentum,weight_decay=weight_decay)
+    optimizer = optim.Adam(net.parameters(),lr=.0002,betas=(.5,.999),weight_decay=0)
     trainstart = time.time()
     for epoch in range(num_epochs):  # loop over the dataset multiple times
         epoch_loss = 0.0
@@ -189,7 +190,7 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
             d_optimizer.zero_grad()
 
             # Train D on real
-            d_real_decision = D(d_real_data)#[:,:,0,0]
+            d_real_decision = D(d_real_data)[:,:,0,0]
             d_real_error = bceloss(d_real_decision, Variable(target_noisy_ones(batch_size,GPU)))
             d_real_error.backward()
             d_optimizer.step()
@@ -198,7 +199,7 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
             # Train D on fake
             d_optimizer.zero_grad()
 
-            d_fake_decision = D(d_fake_data)#[:,:,0,0]
+            d_fake_decision = D(d_fake_data)[:,:,0,0]
             d_fake_error = bceloss(d_fake_decision, Variable(target_noisy_zeros(batch_size,GPU))) 
             d_fake_error.backward()
             d_optimizer.step()
@@ -221,9 +222,9 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
   
             g_optimizer.zero_grad()
 
-            dg_fake_decision = D(g_fake_data)#[:,:,0,0]
+            dg_fake_decision = D(g_fake_data)[:,:,0,0]
             g_loss = (10**-1)*bceloss(dg_fake_decision, Variable(target_noisy_ones(batch_size,GPU)))
-            g_loss +=  mseloss(g_fake_data,Variable(g_fake_label))
+            g_loss += 10* mseloss(g_fake_data,Variable(g_fake_label))
 
             g_loss.backward()
             g_optimizer.step()
