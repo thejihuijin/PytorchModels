@@ -22,17 +22,35 @@ def get_datetime():
     return out
 def preprocess(data):
     return torch.Tensor(data).unsqueeze(1)
-def target_ones(N,GPU=False):
+def target_ones(N,W=1,GPU=False):
     if GPU:
-        return torch.ones(N,1).cuda()
+        return torch.ones(N,1,W,W).cuda()
     else:
         return torch.ones(N,1)
+def target_ones_like(data,GPU=False,noise=False):
+    if noise:
+        target = torch.rand(data.size())*.5+.7
+    else:
+        target = torch.ones_like(data)
+    if GPU:
+        return target.cuda()
+    return target
+
 def target_noisy_ones(N,GPU=False):
     # maps between .7 and 1.2
     labels = torch.rand((N,1))*.5+.7
     if GPU:
         return labels.cuda()
     return labels
+def target_zeros_like(data,GPU=False,noise=False):
+    if noise:
+        target = torch.rand(data.size())*.3
+    else:
+        target = torch.zeros_like(data)
+    if GPU:
+        return target.cuda()
+    else:
+        return target
 def target_zeros(N,GPU=False):
     if GPU:
         return torch.zeros(N,1).cuda()
@@ -87,8 +105,8 @@ class RealDataset(Dataset):
         return self.labels.size(0)
     def __getitem__(self,idx):
         if self.transform:
-            return self.transform(self.labels[idx]))
-        return (self.images[idx],self.labels[idx])
+            return self.transform(self.labels[idx])
+        return self.labels[idx]
     
 class EllipseTransformPair(object):
     def __init__(self,fulltransform=fulltransform):
@@ -130,7 +148,7 @@ def train_net(net, trainloader, num_epochs, GPU=False,
     minibatch=max(1,int(len(trainloader)/10))
     
     # Define Loss Function/Optimizer
-    criterion = nn.L1Loss()
+    criterion = nn.MSELoss()
     #optimizer = optim.SGD(net.parameters(),lr=lr,momentum=momentum,weight_decay=weight_decay)
     optimizer = optim.Adam(net.parameters(),lr=.0002,betas=(.5,.999),weight_decay=0)
     trainstart = time.time()
@@ -197,6 +215,115 @@ def train_net(net, trainloader, num_epochs, GPU=False,
 
 
 
+def train_D(D, faketrainloader, num_epochs=500, GPU=False,
+              weightpath='./weights/',save_epoch=50,saveweights=True):
+    # Create output directory
+    weightpath = os.path.join(weightpath,get_datetime())
+    os.makedirs(weightpath)
+    logpath = os.path.join(weightpath,'log.txt')
+    
+    with open(logpath, "wt") as text_file:
+        print('Epoch\tD Loss\tEpoch Time\tTotal Time',file=text_file)
+
+    num_data = len(faketrainloader)*faketrainloader.batch_size 
+    d_losses = np.zeros(num_epochs)
+
+    # Accumulate log text
+    logtxt = ''
+    
+    # Determine minibatch size
+    minibatch = max(1,int(len(faketrainloader)/10))
+    
+    # Define Loss Function/Optimizer
+    #gansloss = nn.BCELoss()
+    gansloss = nn.MSELoss()
+
+    d_optimizer = optim.Adam(D.parameters(), lr=0.0002, betas=(.5,0.999))
+    #d_optimizer = optim.SGD(D.parameters(), lr=0.001, momentum=0.9)
+
+    
+    trainstart = time.time()
+    for epoch in range(num_epochs):
+        # Collect loss information
+        d_epoch_loss = 0.0
+        d_running_loss = 0.0
+        running_count = 0
+        
+        epochstart = time.time()
+
+        fakeiter = iter(faketrainloader)
+        for batch_index in range(len(faketrainloader)):
+            ## prepare data
+            fakeinput, truelabels = fakeiter.next()
+            batch_size = truelabels.size(0)
+
+
+            if GPU:
+                truelabels = truelabels.cuda()
+                fakeinput = fakeinput.cuda()
+    #             fakelabel = fakelabel.cuda()
+            
+            ## Train D
+            d_optimizer.zero_grad()
+
+            # Train D on real
+            d_real_decision = D(truelabels)
+            d_real_error = gansloss(d_real_decision, 
+                           target_ones_like(d_real_decision,GPU))
+            d_real_error.backward()
+            d_optimizer.step()
+            d_loss = d_real_error.item()
+
+            # Train D on fake
+            d_optimizer.zero_grad()
+
+            d_fake_decision = D(fakeinput)
+            d_fake_error = gansloss(d_fake_decision,
+			target_zeros_like(d_fake_decision,GPU)) 
+            d_fake_error.backward()
+            d_optimizer.step()
+            d_loss += d_fake_error.item()
+            
+            d_running_loss += d_loss
+            d_losses[epoch] += d_loss
+            
+            running_count += 1
+            
+            # print statistics
+            if (batch_index+1) % minibatch == 0:
+                print('\t[%d, %5d] D loss: %.3f, %.3f seconds elapsed' %
+                      (epoch + 1, batch_index + 1, 100*d_running_loss / running_count, 
+                        time.time() - epochstart))
+                d_running_loss = 0.0
+                running_count = 0
+        # Record epoch statistics
+        epochend = time.time()        
+        print('Epoch %d Training Time: %.3f seconds\nTotal Elapsed Time: %.3f seconds' %
+               (epoch+1, epochend-epochstart,epochend-trainstart))
+        
+        # log losses
+        d_losses[epoch] /= num_data
+        logtxt += '%i\t%f\t%f\t%f\n' % (epoch+1,d_losses[epoch], 
+                                           epochend-epochstart,epochend-trainstart)
+
+        
+        # Save weights
+        if (epoch % save_epoch == 0 or epoch == num_epochs-1):
+            if saveweights:
+                d_outpath = os.path.join(weightpath,'D_epoch_'+str(epoch+1)+'.weights')
+                D = D.cpu()
+                torch.save(D.state_dict(),d_outpath)
+
+                if GPU:
+                    D = D.cuda()
+            
+            # write loss to logfile
+            with open(logpath, "at") as text_file:
+                print(logtxt[:-2],file=text_file)
+                logtxt = ''
+
+    print('Finished Training')
+    return d_losses
 def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False,
               weightpath='./weights/',save_epoch=50,saveweights=True):
     # Create output directory
@@ -218,15 +345,16 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
     minibatch = max(1,int(len(realtrainloader)/10))
     
     # Define Loss Function/Optimizer
-    bceloss = nn.BCELoss()
-    mseloss = nn.MSELoss()
+    #gansloss = nn.BCELoss()
+    gansloss = nn.MSELoss()
+    fidelityloss = nn.L1Loss()
 
-#    d_optimizer = optim.Adam(D.parameters(), lr=0.0002, betas=(.5,0.999))
-    d_optimizer = optim.SGD(D.parameters(), lr=0.001, momentum=0.9)
+    d_optimizer = optim.Adam(D.parameters(), lr=0.0002, betas=(.5,0.999))
+    #d_optimizer = optim.SGD(D.parameters(), lr=0.001, momentum=0.9)
     g_optimizer = optim.Adam(G.parameters(), lr=0.0002, betas = (.5,0.999))
 
     
-    G.train()
+    d_iters_per_g = 5
     trainstart = time.time()
     for epoch in range(num_epochs):
         # Collect loss information
@@ -234,7 +362,8 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
         g_epoch_loss = 0.0
         d_running_loss = 0.0
         g_running_loss = 0.0
-        running_count = 0
+        d_running_count = 0
+        g_running_count = 0
         
         epochstart = time.time()
 
@@ -255,62 +384,73 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
             d_real_data = Variable(truelabels)
             d_gen_input = Variable(fakeinput)
             d_fake_data = G(d_gen_input).detach() # detach to avoid training G on these labels
+
+            for p in D.parameters():
+                p.requires_grad = True
             
             ## Train D
             d_optimizer.zero_grad()
 
             # Train D on real
-            d_real_decision = D(d_real_data)[:,:,0,0]
-            d_real_error = bceloss(d_real_decision, Variable(target_noisy_ones(batch_size,GPU)))
+            d_real_decision = D(d_real_data)
+            d_real_error = gansloss(d_real_decision, 
+                           Variable(target_ones_like(d_real_decision.data,GPU)))
             d_real_error.backward()
             d_optimizer.step()
-            d_loss = d_real_error.data[0]
+            d_loss = d_real_error.item()
 
             # Train D on fake
             d_optimizer.zero_grad()
 
-            d_fake_decision = D(d_fake_data)[:,:,0,0]
-            d_fake_error = bceloss(d_fake_decision, Variable(target_noisy_zeros(batch_size,GPU))) 
+            d_fake_decision = D(d_fake_data)
+            d_fake_error = gansloss(d_fake_decision,
+			Variable(target_zeros_like(d_fake_decision.data,GPU))) 
             d_fake_error.backward()
             d_optimizer.step()
-            d_loss += d_fake_error.data[0]
+            d_loss += d_fake_error.item()
             
             d_running_loss += d_loss
             d_losses[epoch] += d_loss
+
+            d_running_count += 1
             
-        
-            ## Train G
-            g_fake_input, g_fake_label = Giter.next()
-            batch_size = g_fake_input.size(0)
+            # Only train every 5 batches
+            if d_running_count % d_iters_per_g == 0:
+              for p in D.parameters():
+                  p.requires_grad = False 
+              ## Train G
+              g_fake_input, g_fake_label = Giter.next()
+              batch_size = g_fake_input.size(0)
 
-            if GPU:
-                g_fake_input = g_fake_input.cuda()
-                g_fake_label = g_fake_label.cuda()
+              if GPU:
+                  g_fake_input = g_fake_input.cuda()
+                  g_fake_label = g_fake_label.cuda()
 
-            gen_input = Variable(g_fake_input)
-            g_fake_data = G(gen_input)
-  
-            g_optimizer.zero_grad()
+              gen_input = Variable(g_fake_input)
+              g_fake_data = G(gen_input)
+    
+              g_optimizer.zero_grad()
 
-            dg_fake_decision = D(g_fake_data)[:,:,0,0]
-            g_loss = (10**-1)*bceloss(dg_fake_decision, Variable(target_noisy_ones(batch_size,GPU)))
-            g_loss += 10* mseloss(g_fake_data,Variable(g_fake_label))
+              dg_fake_decision = D(g_fake_data)
+              g_loss = gansloss(dg_fake_decision, Variable(target_ones_like(dg_fake_decision.data,GPU)))
+              g_loss += 100* fidelityloss(g_fake_data,Variable(g_fake_label))
 
-            g_loss.backward()
-            g_optimizer.step()
-            
-            g_running_loss += g_loss.data[0]
-            g_losses[epoch] += g_loss.data[0]
-            running_count += 1
+              g_loss.backward()
+              g_optimizer.step()
+              
+              g_running_loss += g_loss.item()
+              g_losses[epoch] += g_loss.item()
+              g_running_count += 1
             
             # print statistics
             if (batch_index+1) % minibatch == 0:
                 print('\t[%d, %5d] D loss: %.3f, G loss: %.3f, %.3f seconds elapsed' %
-                      (epoch + 1, batch_index + 1, d_running_loss / running_count, 
-                       g_running_loss/running_count, time.time() - epochstart))
+                      (epoch + 1, batch_index + 1, 100*d_running_loss / d_running_count, 
+                       g_running_loss/g_running_count, time.time() - epochstart))
                 d_running_loss = 0.0
                 g_running_loss = 0.0
-                running_count = 0
+                d_running_count = 0
+                g_running_count = 0
         # Record epoch statistics
         epochend = time.time()        
         print('Epoch %d Training Time: %.3f seconds\nTotal Elapsed Time: %.3f seconds' %
@@ -318,7 +458,7 @@ def train_GANs(G, D, faketrainloader, realtrainloader, num_epochs=500, GPU=False
         
         # log losses
         d_losses[epoch] /= num_data
-        g_losses[epoch] /= num_data
+        g_losses[epoch] /= num_data/d_iters_per_g
         logtxt += '%i\t%f\t%f\t%f\t%f\n' % (epoch+1,d_losses[epoch], g_losses[epoch],
                                            epochend-epochstart,epochend-trainstart)
 
