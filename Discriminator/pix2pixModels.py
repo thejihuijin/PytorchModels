@@ -2,6 +2,55 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 
+from PIL import Image
+import random
+from torch.utils.data import Dataset
+
+# Facade
+class FacadeDataset(Dataset):
+    def __init__(self,basepath):
+        self.basepath = basepath
+        self.imagepaths = [self.basepath + str(num)+'.jpg' for num in range(1,401)]
+    
+    def __getitem__(self,index):
+        img = Image.open(self.imagepaths[index]).convert('RGB')
+        w,h = img.size
+        w2 = int(w/2)
+        label = img.crop((0,0,w2,h)).resize((286,286),Image.BICUBIC)
+        input_ = img.crop((w2,0,w,h)).resize((286,286),Image.BICUBIC)
+        
+        label = transforms.ToTensor()(label)
+        input_ = transforms.ToTensor()(input_)
+        
+        # Crop
+        maxcrop = 286-256-1 
+        w_offset = random.randint(0,maxcrop)
+        h_offset = random.randint(0,maxcrop)
+        
+        label = label[:,h_offset:h_offset+256,w_offset:w_offset+256]
+        input_ = input_[:,h_offset:h_offset+256,w_offset:w_offset+256]
+        
+        # normalize
+        label = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(label)
+        input_ = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(input_)
+        
+        # Flip
+        if random.random() < 0.5:
+            idx = [i for i in range(256-1,-1,-1)]
+            idx = torch.LongTensor(idx)
+            label = label.index_select(2,idx)
+            input_ = input_.index_select(2,idx)
+        
+        # Convert to Grey
+        tmp = label[0, ...] * 0.299 + label[1, ...] * 0.587 + label[2, ...] * 0.114
+        label = tmp.unsqueeze(0)
+        
+        tmp = input_[0, ...] * 0.299 + input_[1, ...] * 0.587 + input_[2, ...] * 0.114
+        input_ = tmp.unsqueeze(0)
+        
+        return input_, label
+    def __len__(self):
+        return 400
 
 # Defines the Unet generator.
 # |num_downs|: number of downsamplings in UNet. For example,
