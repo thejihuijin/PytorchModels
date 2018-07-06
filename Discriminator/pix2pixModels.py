@@ -5,6 +5,7 @@ import torch
 from PIL import Image
 import random
 from torch.utils.data import Dataset
+import torchvision.transforms as transforms
 
 # Facade
 class FacadeDataset(Dataset):
