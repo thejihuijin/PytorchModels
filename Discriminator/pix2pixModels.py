@@ -1,17 +1,21 @@
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
+import torchvision.transforms as transforms
 
 from PIL import Image
 import random
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
+import os
+import glob
 
 # Facade
 class FacadeDataset(Dataset):
     def __init__(self,basepath):
         self.basepath = basepath
-        self.imagepaths = [self.basepath + str(num)+'.jpg' for num in range(1,401)]
+        self.length = len(glob.glob(os.path.join(self.basepath,"*.jpg")))
+        self.imagepaths = [os.path.join(self.basepath, str(num)+'.jpg') for num in range(1,self.length+1)]
     
     def __getitem__(self,index):
         img = Image.open(self.imagepaths[index]).convert('RGB')
@@ -51,7 +55,7 @@ class FacadeDataset(Dataset):
         
         return input_, label
     def __len__(self):
-        return 400
+        return self.length 
 
 # Defines the Unet generator.
 # |num_downs|: number of downsamplings in UNet. For example,
